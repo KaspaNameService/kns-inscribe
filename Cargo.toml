@@ -1,0 +1,56 @@
+[package]
+name = "kns-inscribe"
+version = "0.1.0"
+edition = "2021"
+description = "CLI for inscribing on the Kaspa Name Service (KNS)"
+license = "MIT"
+
+[[bin]]
+name = "kns-inscribe"
+path = "src/main.rs"
+
+[dependencies]
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# Async
+tokio = { version = "1.36", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Config / env
+dotenvy = "0.15"
+
+# Kaspa
+kaspa-addresses = "0.15"
+kaspa-consensus-core = "0.15"
+kaspa-rpc-core = "0.15"
+kaspa-txscript = "0.15"
+kaspa-wrpc-client = "0.15"
+# kaspa-wallet-keys = "0.15"  # not needed; using secp256k1 directly
+
+# Crypto / encoding
+hex = "0.4"
+secp256k1 = { version = "0.29", features = ["global-context", "rand-std"] }
+
+# Unicode grapheme counting (for domain fee calculation)
+unicode-segmentation = "1.11"
+
+# MIME type detection for file inscriptions
+mime_guess = "2"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
