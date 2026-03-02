@@ -9,7 +9,40 @@ Supports domain registration, transfers, marketplace listings, and purchases —
 
 ## Installation
 
-### From source
+### Option 1: Install a prebuilt binary (recommended)
+
+If you just want to use the CLI (no Rust / no building), install the latest release binary.
+
+The exact install commands are kept in `SKILL.md` (capitalized, in this repo). You can either copy them from there, or use these:
+
+```bash
+# macOS/Linux
+curl -fsSL https://github.com/KaspaNameService/kns-inscribe/releases/latest/download/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell)
+iwr -useb https://github.com/KaspaNameService/kns-inscribe/releases/latest/download/install.ps1 | iex
+```
+
+Verify:
+
+```bash
+kns-inscribe --version
+kns-inscribe --help
+```
+
+### Option 2: Ask an AI to set it up for you
+
+If you're using an AI coding assistant/agent, tell it to follow the repo instructions in `SKILL.md`.
+
+Example prompt you can paste:
+
+```text
+Use `SKILL.md` in this repo to install `kns-inscribe` (prefer the prebuilt binary) and verify it runs with `kns-inscribe --version`. Then help me configure the required env vars and run a simple command.
+```
+
+### Option 3: Build from source
 
 Requires [Rust](https://rustup.rs) 1.75+.
 
