@@ -23,6 +23,10 @@ use std::sync::Arc;
     version
 )]
 struct Cli {
+    /// Path to an env file to load (overrides .env auto-discovery).
+    #[arg(long, global = true)]
+    env_file: Option<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -154,6 +158,12 @@ async fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
+
+    if let Some(path) = &cli.env_file {
+        dotenvy::from_path(path)
+            .map_err(|e| anyhow!("Failed to load env file '{}': {}", path, e))?;
+    }
+
     let config = Config::from_env()?;
 
     // Parse private key and derive keypair

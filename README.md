@@ -75,10 +75,14 @@ cp .env.example .env
 | `NETWORK_ID`        | Yes      | Network identifier                        | `mainnet`, `testnet-10`, `devnet` |
 | `KNS_FUNDS_ADDRESS` | No       | Fee recipient address; defaults to sender | `kaspa:q...`                      |
 
-Variables can also be passed inline:
+Variables can also be passed inline or via a custom env file:
 
 ```bash
+# Inline
 PRIVATE_KEY=abc123... NODE_IP=1.2.3.4 kns-inscribe create alice
+
+# Custom env file path
+kns-inscribe --env-file /path/to/.env create alice
 ```
 
 ### Default wRPC ports
