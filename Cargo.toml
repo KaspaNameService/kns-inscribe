@@ -1,6 +1,6 @@
 [package]
 name = "kns-inscribe"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2021"
 description = "CLI for inscribing on the Kaspa Name Service (KNS)"
 license = "MIT"

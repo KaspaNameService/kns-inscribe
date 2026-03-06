@@ -19,12 +19,15 @@ fn get_domain_fee_sompi(name: &str) -> u64 {
 
 /// Build a "create" inscription for a KNS domain.
 /// name: the domain label (e.g. "alice" for alice.kas)
-pub fn build_create(name: &str) -> Result<InscriptionContent> {
+/// tld: top-level domain suffix (e.g. "kas"). Defaults to "kas" if None.
+pub fn build_create(name: &str, tld: Option<&str>) -> Result<InscriptionContent> {
     let fee_sompi = get_domain_fee_sompi(name);
+    let tld = tld.unwrap_or("kas");
     let content = json!({
         "op": "create",
         "p": "domain",
         "v": name,
+        "s": tld,
     });
     Ok(InscriptionContent {
         json: serde_json::to_string(&content)?,

@@ -45,6 +45,9 @@ enum Commands {
         /// Only valid when --protocol is "asset".
         #[arg(long)]
         file: Option<String>,
+        /// Top-level domain suffix for domain registrations (e.g. "kas"). Defaults to "kas".
+        #[arg(long)]
+        tld: Option<String>,
         /// Override the payment address for the domain registration fee (domain protocol only).
         #[arg(long)]
         pay_to: Option<String>,
@@ -197,6 +200,7 @@ async fn main() -> Result<()> {
             value,
             protocol,
             file,
+            tld,
             pay_to,
             fee,
         } => {
@@ -205,7 +209,7 @@ async fn main() -> Result<()> {
                 let name = value
                     .as_deref()
                     .ok_or_else(|| anyhow!("A domain name is required for the domain protocol"))?;
-                let mut inscription = operations::build_create(name)?;
+                let mut inscription = operations::build_create(name, tld.as_deref())?;
                 if let Some(f) = fee_override {
                     inscription.fee_sompi = f;
                 }
