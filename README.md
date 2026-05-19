@@ -13,7 +13,7 @@ Supports domain registration, transfers, marketplace listings, and purchases —
 
 If you just want to use the CLI (no Rust / no building), install the latest release binary.
 
-The exact install commands are kept in `SKILL.md` (capitalized, in this repo). You can either copy them from there, or use these:
+Install commands (also available in `SKILL.md` for AI agents):
 
 ```bash
 # macOS/Linux
