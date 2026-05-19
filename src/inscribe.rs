@@ -11,7 +11,7 @@ use kaspa_consensus_core::{
         UtxoEntry,
     },
 };
-use kaspa_rpc_core::RpcTransaction;
+use kaspa_rpc_core::{api::rpc::RpcApi, RpcTransaction};
 use kaspa_txscript::{
     opcodes::codes::*,
     script_builder::ScriptBuilder,
@@ -30,10 +30,62 @@ use crate::tx_common::{select_utxos, wait_for_utxo_by_txid, DUST_THRESHOLD_SOMPI
 const COMMIT_AMOUNT_SOMPI: u64 = 30_000_000; // 0.3 KAS — P2SH anchor; sized to keep storage mass ~33k grams
 const MAX_SCRIPT_SIZE: usize = 520; // bytes
 
-// Hard-coded per-transaction miner fees (sompi).
-// This intentionally trades optimal fees for simplicity.
-const COMMIT_TX_FEE_SOMPI: u64 = 50_000; // 0.0005 KAS
-const REVEAL_TX_FEE_SOMPI: u64 = 50_000; // 0.0005 KAS
+// Commit tx mass is dominated by storage mass: C / COMMIT_AMOUNT_SOMPI = 10^12 / 30M ≈ 33_333 grams.
+// 40_000 gives a ~20% buffer above the theoretical value.
+const COMMIT_TX_MASS_GRAMS: u64 = 40_000;
+// Fallback feerate when get_fee_estimate() is unavailable (sompi/gram).
+// At 10 sompi/gram: commit fee ≈ 440k sompi (0.0044 KAS), comparable to the old hardcoded value.
+const FALLBACK_FEERATE: f64 = 10.0;
+const MIN_FEE_SOMPI: u64 = 10_000; // 0.0001 KAS absolute floor
+
+// ─── Fee helpers ─────────────────────────────────────────────────────────────
+
+async fn fetch_feerate(rpc_api: &dyn RpcApi) -> f64 {
+    match rpc_api.get_fee_estimate().await {
+        Ok(est) if !est.normal_buckets.is_empty() => {
+            let rate = est.normal_buckets[0].feerate;
+            info!("Network feerate: {:.4} sompi/gram (sub-minute inclusion)", rate);
+            rate
+        }
+        Ok(est) => {
+            let rate = est.priority_bucket.feerate;
+            info!("Network feerate: {:.4} sompi/gram (priority bucket; no normal buckets)", rate);
+            rate
+        }
+        Err(e) => {
+            info!("get_fee_estimate failed ({e}), using fallback {FALLBACK_FEERATE:.1} sompi/gram");
+            FALLBACK_FEERATE
+        }
+    }
+}
+
+/// Estimate the compute mass (grams) of the reveal transaction.
+/// Storage mass is negligible for reveal txs because the output value (domain fee) >> P2SH input value.
+fn reveal_tx_mass_grams(redeem_script_len: usize, n_extra_inputs: usize, n_outputs: usize) -> u64 {
+    const MASS_PER_BYTE: u64 = 1;
+    const MASS_PER_SPK_BYTE: u64 = 10;
+    const MASS_PER_SIG_OP: u64 = 1000;
+    const OUT_SCRIPT_LEN: u64 = 35; // standard P2PKH script
+
+    // P2SH sig script = raw_sig_bytes(66) + add_data(redeem_script).
+    // add_data encodes as [OP_PUSHDATA1=0x4c][1-byte len][data] for scripts in 76-255 bytes.
+    let p2sh_sig_script_len = 68u64 + redeem_script_len as u64;
+    let p2pk_sig_script_len = 66u64; // standard Schnorr: [OP_DATA_65][64-byte sig][sighash]
+
+    let tx_size = 94 // fixed header (version + counts + locktime + subnetwork + gas + payload)
+        + (52 + p2sh_sig_script_len)                              // P2SH input
+        + (52 + p2pk_sig_script_len) * n_extra_inputs as u64     // extra sender inputs
+        + (18 + OUT_SCRIPT_LEN) * n_outputs as u64;              // outputs
+
+    let spk_mass = (2 + OUT_SCRIPT_LEN) * n_outputs as u64 * MASS_PER_SPK_BYTE;
+    let sig_ops_mass = (1 + n_extra_inputs as u64) * MASS_PER_SIG_OP; // 1 P2SH + extra
+
+    tx_size * MASS_PER_BYTE + spk_mass + sig_ops_mass
+}
+
+fn calc_fee(mass_grams: u64, feerate: f64) -> u64 {
+    ((mass_grams as f64 * feerate * 1.1).ceil() as u64).max(MIN_FEE_SOMPI)
+}
 
 // ─── Script builders ────────────────────────────────────────────────────────
 
@@ -187,6 +239,7 @@ async fn run_inscribe_with_script(
 
     let sender_script_pubkey = pay_to_address_script(sender_address);
     let rpc_api = rpc.rpc_api();
+    let feerate = fetch_feerate(rpc_api.as_ref()).await;
 
     // ── Commit transaction ────────────────────────────────────────────────
     let sender_utxos = rpc_api
@@ -199,11 +252,12 @@ async fn run_inscribe_with_script(
         );
     }
 
-    let commit_fee = COMMIT_TX_FEE_SOMPI;
+    let commit_fee = calc_fee(COMMIT_TX_MASS_GRAMS, feerate);
     info!(
-        "Commit fee (hard-coded): {} sompi ({:.6} KAS)",
+        "Commit fee: {} sompi ({:.6} KAS, feerate={:.4} sompi/gram)",
         commit_fee,
-        commit_fee as f64 / SOMPI_PER_KAS as f64
+        commit_fee as f64 / SOMPI_PER_KAS as f64,
+        feerate
     );
 
     let (selected_utxos, total_input) =
@@ -278,11 +332,13 @@ async fn run_inscribe_with_script(
     };
     info!("Reveal output 0 pays to {}", pay_to_display);
 
-    let reveal_fee = REVEAL_TX_FEE_SOMPI;
+    // 1 extra sender input (covers miner fee), 2 outputs (payment + change).
+    let reveal_fee = calc_fee(reveal_tx_mass_grams(redeem_script.len(), 1, 2), feerate);
     info!(
-        "Reveal fee (hard-coded): {} sompi ({:.6} KAS)",
+        "Reveal fee: {} sompi ({:.6} KAS, feerate={:.4} sompi/gram)",
         reveal_fee,
-        reveal_fee as f64 / SOMPI_PER_KAS as f64
+        reveal_fee as f64 / SOMPI_PER_KAS as f64,
+        feerate
     );
 
     // The P2SH UTXO (COMMIT_AMOUNT_SOMPI) contributes to the reveal tx.
